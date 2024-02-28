@@ -15,35 +15,39 @@ import java.util.List;
 import java.util.Map;
 
 @Repository
+@Transactional(readOnly = true)
 public class TransacaoRepository {
     private static final String SQL_UPDATE_SALDO_CLIENTE = """
                 WITH results AS (
-                    UPDATE public.cliente
-                    SET saldo = saldo + :valorTransacao
+                    UPDATE cliente
+                    SET saldo = saldo + (:valorTransacao)
                     WHERE id = :idCliente
                     RETURNING limite, saldo
-                )\s
+                )
                 SELECT * FROM results
             """;
 
     private static final String SQL_INSERT_TRANSACAO = """
-            INSERT INTO public.transacao (id_cliente, descricao, tipo, valor)
-            VALUES(:idCliente, :descricao, :tipo, :valorTransacao);
+                INSERT INTO transacao (id_cliente, descricao, tipo, valor)
+                VALUES(:idCliente, :descricao, :tipo, :valorTransacao);
             """;
 
     private static final String SQL_EXTRATO = """
                 select
                 	c.saldo,
                 	c.limite,
+                	t.id,
                 	t.valor,
                 	t.tipo,
                 	t.descricao,
                 	t.realizada_em
                 from
-                	public.cliente c
-                	left join public.transacao t on (t.id_cliente = c.id)
+                	cliente c
+                	left join transacao t on (t.id_cliente = c.id)
                 where
                 	c.id = :idCliente
+                order by 
+                    t.id desc
                 limit 10
             """;
 
@@ -62,8 +66,8 @@ public class TransacaoRepository {
                 .query(TransacaoInsertResponse.class)
                 .optional()
                 .orElseThrow(() -> new ClienteNaoExisteException("Cliente não encontrato"));
-        if (result.saldo() < 0 && (-result.saldo()) > result.limite()) {
-            throw new SaldoInsuficienteException("saldo insuficiente");
+        if (transacaoInsertRequest.tipo().equals("d") && result.saldo() < 0 && ((-result.saldo()) > result.limite())) {
+            throw new SaldoInsuficienteException("Saldo insuficiente");
         }
         jdbcClient
                 .sql(SQL_INSERT_TRANSACAO)
@@ -82,7 +86,7 @@ public class TransacaoRepository {
                 .query()
                 .listOfRows();
         if (result.isEmpty()) {
-            throw new ClienteNaoExisteException("Cliente não encontrato");
+            throw new ClienteNaoExisteException("Cliente não encontrado");
         }
         ExtratoResponseSaldo saldo = null;
         final List<ExtratoResponseTransacao> ultimasTransacoes = new ArrayList<>();
@@ -93,6 +97,9 @@ public class TransacaoRepository {
                         OffsetDateTime.now(ZoneOffset.UTC),
                         (Long) row.get("limite")
                 );
+            }
+            if (row.get("id") == null) {
+                break;
             }
             ultimasTransacoes.add(
                     new ExtratoResponseTransacao(

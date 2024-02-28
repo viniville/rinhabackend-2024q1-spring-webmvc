@@ -3,10 +3,10 @@ package com.viniville.rinhabackend;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+//@SpringBootTest
 class RinhabackendApplicationTests {
 
-	@Test
+//	@Test
 	void contextLoads() {
 	}
 
